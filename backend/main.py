@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
+from routers import users, rooms, matches, rounds, websocket
 
 load_dotenv()
 
@@ -15,6 +16,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 라우터 등록
+app.include_router(users.router)
+app.include_router(rooms.router)
+app.include_router(matches.router)
+app.include_router(rounds.router)
+app.include_router(websocket.router)
 
 def create_db_and_table():
     """데이터베이스 및 테이블 생성"""

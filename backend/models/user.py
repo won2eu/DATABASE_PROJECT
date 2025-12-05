@@ -10,7 +10,7 @@ class User(Base):
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     
     # Relationships
-    roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
+    roles = relationship("UserRole", foreign_keys="UserRole.user_id", back_populates="user", cascade="all, delete-orphan")
     rooms_as_player1 = relationship("Room", foreign_keys="Room.player1_id", back_populates="player1")
     rooms_as_player2 = relationship("Room", foreign_keys="Room.player2_id", back_populates="player2")
     match_players = relationship("MatchPlayer", back_populates="user")

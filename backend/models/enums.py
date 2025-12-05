@@ -12,6 +12,7 @@ class MatchStatus(str, Enum):
 
 class RoundState(str, Enum):
     DEALING = "dealing"
+    SIDE_SELECTION = "side_selection"  # 베팅 면 선택 단계
     BETTING = "betting"
     REVEAL = "reveal"
     ENDED = "ended"
@@ -21,11 +22,20 @@ class ActionType(str, Enum):
     CALL = "call"
     RAISE = "raise"
     FOLD = "fold"
+    CHECK = "check"  # 추가 베팅 없이 턴 넘기기
     DOUBLE_SIDE = "double_side"
+    SELECT_SIDE = "select_side"  # 면 선택
     REVEAL = "reveal"
     TIMEOUT = "timeout"
 
 class CardSide(str, Enum):
     FRONT = "front"
     BACK = "back"
+
+class RoundResult(str, Enum):
+    PLAYER1_WIN = "player1_win"
+    PLAYER2_WIN = "player2_win"
+    TIE = "tie"  # 무승부
+    PLAYER1_FOLD = "player1_fold"
+    PLAYER2_FOLD = "player2_fold"
 
