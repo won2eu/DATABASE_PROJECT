@@ -57,9 +57,9 @@ class DeckService:
             for _ in range(template.copies):
                 deck.append(template.id)
         
-        # 덱 섞기
-        random.seed(match.deck_seed)
-        random.shuffle(deck)
+        # 덱 섞기 - 독립적인 Random 인스턴스 사용 (전역 상태 변경 방지)
+        rng = random.Random(match.deck_seed)
+        rng.shuffle(deck)
         
         # DeckInstance 생성
         for order_no, template_id in enumerate(deck, start=1):
@@ -90,8 +90,9 @@ class DeckService:
             if max_order:
                 # 이미 사용한 카드들 제거하고 재섞기
                 db.query(DeckInstance).filter(DeckInstance.match_id == match.id).delete()
-                # 새로운 시드로 재섞기
-                match.deck_seed = random.randint(1, 1000000)
+                # 새로운 시드로 재섞기 (독립적인 Random 인스턴스 사용)
+                rng = random.Random()
+                match.deck_seed = rng.randint(1, 1000000)
                 DeckService.shuffle_deck(db, match)
                 instance = db.query(DeckInstance).filter(
                     DeckInstance.match_id == match.id,
