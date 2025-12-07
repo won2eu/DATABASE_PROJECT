@@ -202,7 +202,13 @@ class BettingService:
         else:
             raise ValueError(f"지원하지 않는 액션: {action_type}")
         
-        db.commit()
+        # 모든 변경사항을 atomic하게 커밋
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise ValueError(f"베팅 처리 중 오류 발생: {str(e)}")
+        
         return round
     
     @staticmethod

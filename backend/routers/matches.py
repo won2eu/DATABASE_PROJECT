@@ -28,6 +28,7 @@ def start_match(match_data: MatchStart, db: Session = Depends(get_db)):
             players=[
                 {
                     "user_id": p.user_id,
+                    "username": p.user.username,
                     "seat": p.seat,
                     "chips": p.chips,
                     "is_bot": p.is_bot
@@ -65,6 +66,7 @@ def get_match_by_room(room_id: int, db: Session = Depends(get_db)):
         players=[
             {
                 "user_id": p.user_id,
+                "username": p.user.username,
                 "seat": p.seat,
                 "chips": p.chips,
                 "is_bot": p.is_bot
@@ -94,6 +96,7 @@ def get_match(match_id: int, db: Session = Depends(get_db)):
         players=[
             {
                 "user_id": p.user_id,
+                "username": p.user.username,
                 "seat": p.seat,
                 "chips": p.chips,
                 "is_bot": p.is_bot

@@ -9,6 +9,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 export default function Home() {
   // 게임 상태: 'lobby' | 'playing' | 'gameOver'
   const [gameStatus, setGameStatus] = useState<'lobby' | 'playing' | 'gameOver'>('lobby');
+  const [lobbyKey, setLobbyKey] = useState(0); // Lobby 컴포넌트 리마운트용
   
   // 자신의 user_id와 room_id
   const [myUserId, setMyUserId] = useState<number | null>(null);
@@ -35,6 +36,7 @@ export default function Home() {
   // 플레이어 정보 (UI용 - 기본값 유지)
   const [bottomPlayerChips, setBottomPlayerChips] = useState(30);
   const [topPlayerChips, setTopPlayerChips] = useState(30);
+  const [topPlayerUsername, setTopPlayerUsername] = useState<string | null>(null);
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [currentTurnUserId, setCurrentTurnUserId] = useState<number | null>(null);
   
@@ -49,23 +51,57 @@ export default function Home() {
   // 게임 종료 (UI용 - 기본값 유지)
   const [gameOver, setGameOver] = useState(false);
   const [gameWinner, setGameWinner] = useState<'bottom' | 'top' | null>(null);
+  
+  // 게임 진행 시간
+  const [gameStartTime, setGameStartTime] = useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
 
   // 게임 시작 핸들러 (로비에서 호출)
   const handleStartGame = async (userId: number, roomIdParam: number) => {
+    // 모든 게임 상태 초기화 (이전 게임 상태 제거)
+    setGameOver(false);
+    setGameWinner(null);
+    setRoundResult(null);
+    setRoundState('dealing');
+    setBottomPlayerCard(null);
+    setTopPlayerCard(null);
+    setBottomPlayerChosenSide(null);
+    setTopPlayerChosenSide(null);
+    setDealCards(false);
+    setPot(0);
+    setCarryOverPot(0);
+    setCurrentBet(1);
+    setMyBetTotal(0);
+    setCanDoubleSideBet(false);
+    setIsDoubleSideBet(false);
+    setRevealedBottomValue(null);
+    setRevealedTopValue(null);
+    setChipsGained(0);
+    setIsMyTurn(false);
+    setCurrentTurnUserId(null);
+    setRoundId(null);
+    
     setMyUserId(userId);
     setRoomId(roomIdParam);
-    setGameStatus('playing');
     
     // 매치 정보 가져오기
     try {
       const matchResponse = await fetch(`${API_URL}/api/matches/room/${roomIdParam}`);
       if (!matchResponse.ok) {
-        console.error('매치를 찾을 수 없습니다');
+        console.error('매치를 찾을 수 없습니다. 아직 게임이 시작되지 않았습니다.');
+        // 매치가 없으면 로비 상태 유지
         return;
       }
       
       const match = await matchResponse.json();
       setMatchId(match.id);
+      
+      // 게임 시작 시간 기록
+      setGameStartTime(Date.now());
+      setElapsedTime(0);
+      
+      // 게임 상태를 playing으로 변경 (매치가 있을 때만)
+      setGameStatus('playing');
       
       // 플레이어 칩 정보 업데이트
       const myPlayer = match.players.find((p: any) => p.user_id === userId);
@@ -76,12 +112,14 @@ export default function Home() {
       }
       if (otherPlayer) {
         setTopPlayerChips(otherPlayer.chips);
+        setTopPlayerUsername(otherPlayer.username);
       }
       
       // 현재 라운드 정보 가져오기
       await fetchCurrentRound(match.id, userId);
     } catch (error) {
       console.error('게임 정보 로드 실패:', error);
+      // 에러 발생 시 로비 상태 유지
     }
   };
 
@@ -110,6 +148,21 @@ export default function Home() {
     }
   }, [matchId, myUserId]);
 
+  // 게임 진행 시간 업데이트
+  useEffect(() => {
+    if (gameStatus !== 'playing' || !gameStartTime) {
+      setElapsedTime(0);
+      return;
+    }
+    
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+      setElapsedTime(elapsed);
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [gameStatus, gameStartTime]);
+
   // 실시간 업데이트 (폴링)
   useEffect(() => {
     if (!matchId || !myUserId || gameStatus !== 'playing') return;
@@ -124,7 +177,13 @@ export default function Home() {
       try {
         // 현재 라운드 정보 가져오기
         const roundResponse = await fetch(`${API_URL}/api/rounds/match/${matchId}/current`);
-        if (!roundResponse.ok) return;
+        if (!roundResponse.ok) {
+          // 404는 라운드가 아직 생성되지 않았을 수 있으므로 조용히 무시
+          if (roundResponse.status === 404) return;
+          // 다른 에러는 로그만 남기고 계속
+          console.warn('라운드 정보 조회 실패:', roundResponse.status);
+          return;
+        }
         
         const round = await roundResponse.json();
         
@@ -141,10 +200,16 @@ export default function Home() {
           setTopPlayerChosenSide(null);
           setMyBetTotal(0);
           setCurrentBet(1);
-          setDealCards(false);
+          setDealCards(false); // 애니메이션 리셋
           setCanDoubleSideBet(false);
           setIsDoubleSideBet(false);
           setRoundState('dealing');
+          
+          // 새로운 라운드 시작 시 카드 분배 애니메이션 트리거
+          // 약간의 딜레이 후 애니메이션 시작 (상태 초기화 후)
+          setTimeout(() => {
+            setDealCards(true);
+          }, 100);
         }
         
         // 변경 사항 확인
@@ -184,7 +249,13 @@ export default function Home() {
           // 매치 정보도 업데이트
           await fetchMatchInfo();
         }
-      } catch (error) {
+      } catch (error: any) {
+        // 네트워크 에러는 조용히 무시 (백엔드 서버가 꺼졌거나 네트워크 문제)
+        if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+          // 백엔드 서버가 실행되지 않았거나 네트워크 문제
+          // 조용히 무시하고 다음 폴링에서 재시도
+          return;
+        }
         console.error('폴링 실패:', error);
       }
     }, 1000); // 1초마다 폴링 (더 빠른 반응)
@@ -223,6 +294,7 @@ export default function Home() {
           frontValue: otherCard.front_value,
           backValue: otherCard.back_value,
         });
+        // 상대방이 선택한 면을 표시 (상대방에게도 보이게)
         setTopPlayerChosenSide(otherCard.chosen_side || null);
       }
       
@@ -338,18 +410,33 @@ export default function Home() {
     
     // 라운드 결과 처리
     if (round.state === 'ended' && round.result) {
-      handleRoundEnd(round, userId);
+      handleRoundEnd(round, userId).catch(console.error);
     }
     
-    // 카드 분배 애니메이션 시작
-    if (round.state === 'side_selection' || round.state === 'betting' || round.state === 'dealing') {
+    // 카드 분배 애니메이션 시작 (라운드가 시작될 때만)
+    // 라운드가 변경되지 않았을 때만 애니메이션 시작 (중복 방지)
+    if ((round.state === 'side_selection' || round.state === 'betting' || round.state === 'dealing') && !dealCards) {
       setDealCards(true);
     }
   };
 
   // 라운드 종료 처리
-  const handleRoundEnd = (round: any, userId: number) => {
+  const handleRoundEnd = async (round: any, userId: number) => {
     if (!round.result) return;
+    
+    // 매치가 ACTIVE 상태가 아니면 처리하지 않음 (새 게임 시작 시 이전 게임의 ended 라운드 방지)
+    if (matchId) {
+      try {
+        const matchCheck = await fetch(`${API_URL}/api/matches/${matchId}`).then(r => r.ok ? r.json() : null);
+        if (!matchCheck || matchCheck.status !== 'active') {
+          console.log('매치가 ACTIVE 상태가 아니므로 라운드 종료 처리 스킵:', matchCheck?.status);
+          return;
+        }
+      } catch (error) {
+        console.error('매치 상태 확인 실패:', error);
+        return;
+      }
+    }
     
     const myCard = round.cards?.find((c: any) => c.player_id === userId);
     const otherCard = round.cards?.find((c: any) => c.player_id !== userId);
@@ -433,6 +520,23 @@ export default function Home() {
       if (!matchResponse.ok) return;
       
       const match = await matchResponse.json();
+      
+      // 매치가 ACTIVE 상태가 아니면 게임 종료 상태를 설정하지 않음 (새 게임 시작 시 이전 게임 정보 방지)
+      if (match.status !== 'active') {
+        // ACTIVE가 아닌 매치는 칩 정보만 업데이트하고 게임 종료 상태는 설정하지 않음
+        const myPlayer = match.players.find((p: any) => p.user_id === myUserId);
+        const otherPlayer = match.players.find((p: any) => p.user_id !== myUserId);
+        
+        if (myPlayer) {
+          setBottomPlayerChips(myPlayer.chips);
+        }
+        if (otherPlayer) {
+          setTopPlayerChips(otherPlayer.chips);
+          setTopPlayerUsername(otherPlayer.username);
+        }
+        return;
+      }
+      
       const myPlayer = match.players.find((p: any) => p.user_id === myUserId);
       const otherPlayer = match.players.find((p: any) => p.user_id !== myUserId);
       
@@ -445,13 +549,14 @@ export default function Home() {
       }
       if (otherPlayer) {
         setTopPlayerChips(otherPlayer.chips);
+        setTopPlayerUsername(otherPlayer.username);
         if (otherPlayer.chips <= 0) {
           setGameOver(true);
           setGameWinner('bottom');
         }
       }
       
-      // 매치 종료 확인
+      // 매치 종료 확인 (ACTIVE 상태일 때만)
       if (match.status === 'ended') {
         setGameOver(true);
       }
@@ -610,10 +715,10 @@ export default function Home() {
           setCarryOverPot(response.round.carry_over_pot || 0);
           
           // 애니메이션 완료 후 결과 처리
-          setTimeout(() => {
+          setTimeout(async () => {
             updateGameState(response.round, myUserId);
             if (response.round.state === 'ended') {
-              handleRoundEnd(response.round, myUserId);
+              await handleRoundEnd(response.round, myUserId);
             }
           }, 6200); // 애니메이션 완료 후 (1.2초 + 3초 + 2초 = 6.2초)
         } else {
@@ -657,16 +762,16 @@ export default function Home() {
             }
             
             // 애니메이션 완료 후 결과 처리
-            setTimeout(() => {
+            setTimeout(async () => {
               updateGameState(response.round, myUserId);
-              handleRoundEnd(response.round, myUserId);
+              await handleRoundEnd(response.round, myUserId);
             }, 10200);
           } else {
             updateGameState(response.round, myUserId);
             
             // 라운드가 종료되었으면 결과 처리
             if (response.round.state === 'ended') {
-              handleRoundEnd(response.round, myUserId);
+              await handleRoundEnd(response.round, myUserId);
             }
           }
         }
@@ -760,6 +865,8 @@ export default function Home() {
     setRoundId(null);
     setGameOver(false);
     setGameWinner(null);
+    setGameStartTime(null);
+    setElapsedTime(0);
     // 모든 게임 상태 초기화
     setRoundState('dealing');
     setRoundResult(null);
@@ -770,6 +877,7 @@ export default function Home() {
     setDealCards(false);
     setBottomPlayerChips(30);
     setTopPlayerChips(30);
+    setTopPlayerUsername(null);
     setPot(0);
     setCarryOverPot(0);
     setCurrentBet(1);
@@ -781,11 +889,13 @@ export default function Home() {
     setChipsGained(0);
     setIsMyTurn(false);
     setCurrentTurnUserId(null);
+    // Lobby 컴포넌트 완전히 리마운트하여 상태 초기화
+    setLobbyKey(prev => prev + 1);
   };
 
   // 로비 화면
   if (gameStatus === 'lobby') {
-    return <Lobby onStartGame={handleStartGame} />;
+    return <Lobby key={lobbyKey} onStartGame={handleStartGame} />;
   }
 
   // 게임 플레이 화면 (UI는 유지)
@@ -818,6 +928,8 @@ export default function Home() {
         gameWinner={gameWinner}
         onNextRound={handleNextRound}
         onNewGame={handleBackToLobby}
+        elapsedTime={elapsedTime}
+        topPlayerUsername={topPlayerUsername}
       />
     </>
   );

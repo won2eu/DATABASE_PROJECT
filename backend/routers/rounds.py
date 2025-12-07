@@ -33,7 +33,7 @@ def select_side(round_id: int, request: SideSelectionRequest, db: Session = Depe
 
 @router.post("/{round_id}/action", response_model=ActionResponse)
 def perform_action(round_id: int, request: ActionRequest, db: Session = Depends(get_db)):
-    """베팅 액션 수행"""
+    """베팅 액션 수행 (트랜잭션 처리)"""
     try:
         round = BettingService.process_action(
             db, 
@@ -48,12 +48,16 @@ def perform_action(round_id: int, request: ActionRequest, db: Session = Depends(
             round=_build_round_response(db, round)
         )
     except ValueError as e:
+        # 예외 발생 시 롤백
+        db.rollback()
         return ActionResponse(
             success=False,
             message=str(e),
             round=None
         )
     except Exception as e:
+        # 예외 발생 시 롤백
+        db.rollback()
         return ActionResponse(
             success=False,
             message=f"액션 처리 실패: {str(e)}",

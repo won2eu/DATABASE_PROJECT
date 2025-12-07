@@ -44,6 +44,10 @@ interface PokerBoardProps {
   gameOver?: boolean; // 게임 종료 여부
   gameWinner?: 'bottom' | 'top' | null; // 게임 승자
   onNewGame?: () => void; // 새 게임 시작
+  // 게임 진행 시간
+  elapsedTime?: number; // 경과 시간 (초)
+  // 상대 플레이어 정보
+  topPlayerUsername?: string | null; // 상대 플레이어 username
 }
 
 export default function PokerBoard({
@@ -73,6 +77,8 @@ export default function PokerBoard({
   gameOver = false,
   gameWinner = null,
   onNewGame,
+  elapsedTime = 0,
+  topPlayerUsername = null,
 }: PokerBoardProps) {
   const requiredBet = Math.max(0, currentBet - myBetTotal);
   // Raise 최소 금액: 앞서 베팅된 칩보다 더 많은 칩만 베팅하면 됨 (최소 1칩만 더 올리면 됨)
@@ -146,14 +152,81 @@ export default function PokerBoard({
     }
   }, [dealCards, dealingState]);
   
+  // 경과 시간 포맷팅 (MM:SS)
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="relative w-full h-screen bg-black overflow-hidden">
+      {/* 상대 플레이어 username 표시 (상단 중앙) */}
+      {topPlayerUsername && (
+        <>
+          <div
+            style={{
+              position: 'absolute',
+              top: '20px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 1000,
+              background: 'rgba(0, 0, 0, 0.8)',
+              border: '2px solid rgba(255, 215, 0, 0.8)',
+              borderRadius: '12px',
+              padding: '12px 20px',
+              color: 'rgba(255, 215, 0, 1)',
+              fontSize: '20px',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 12px rgba(255, 215, 0, 0.3)',
+            }}
+          >
+            상대 플레이어: {topPlayerUsername}
+          </div>
+          {/* 사람 형상 아이콘 (절대 위치로 배치하여 다른 UI에 영향 없음) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 'clamp(60px, 10vh, 100px)',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 5,
+              color: 'rgba(255, 255, 255, 0.3)',
+              fontSize: '12vw',
+              lineHeight: '1',
+            }}
+          >
+            👤
+          </div>
+        </>
+      )}
+      
+      {/* 게임 진행 시간 표시 (오른쪽 상단) */}
+      {elapsedTime > 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            right: '35px',
+            zIndex: 1000,
+            color: '#ffffff',
+            fontSize: '80px',
+            fontWeight: '1000',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            letterSpacing: '2px',
+            textShadow: '0 2px 8px rgba(0, 0, 0, 0.8)',
+          }}
+        >
+          {formatTime(elapsedTime)}
+        </div>
+      )}
+      
       {/* 3D 컨테이너 - 원근감 설정 */}
       <div 
         className="absolute inset-0 flex items-center justify-center"
         style={{
           perspective: '1500px',
           perspectiveOrigin: 'center 40%',
+          zIndex: 10,
         }}
       >
         {/* 보드판 컨테이너 */}
@@ -470,26 +543,33 @@ export default function PokerBoard({
                   height: '300px',
                   background: 'rgba(0, 0, 0, 0.3)',
                   borderRadius: '12px',
-                  border: '2px solid rgba(255, 215, 0, 0.6)',
+                  border: topPlayerChosenSide === 'front' 
+                    ? '3px solid rgba(59, 130, 246, 0.9)' 
+                    : '2px solid rgba(255, 215, 0, 0.6)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3)',
+                  boxShadow: topPlayerChosenSide === 'front'
+                    ? '0 0 20px rgba(59, 130, 246, 0.6), 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3)'
+                    : '0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3)',
                   position: 'relative',
                 }}
               >
-                {topPlayerCard ? (
-                  <div
-                    style={{
-                      color: '#ffffff',
-                      fontSize: '120px',
-                      fontWeight: 'bold',
-                      textShadow: '0 4px 8px rgba(0, 0, 0, 0.8)',
-                      transform: 'scaleY(-1) scaleX(-1)',
-                    }}
-                  >
-                    {topPlayerCard.frontValue}
-                  </div>
+                {topPlayerCard && topPlayerChosenSide !== 'back' ? (
+                  <>
+                    {/* 앞면 숫자만 표시 (뒷면 숫자는 숨김) */}
+                    <div
+                      style={{
+                        color: '#ffffff',
+                        fontSize: '120px',
+                        fontWeight: 'bold',
+                        textShadow: '0 4px 8px rgba(0, 0, 0, 0.8)',
+                        transform: 'scaleY(-1) scaleX(-1)',
+                      }}
+                    >
+                      {topPlayerCard.frontValue}
+                    </div>
+                  </>
                 ) : (
                   <span
                     style={{
@@ -511,24 +591,46 @@ export default function PokerBoard({
                   height: '300px',
                   background: 'rgba(0, 0, 0, 0.3)',
                   borderRadius: '12px',
-                  border: '2px solid rgba(255, 215, 0, 0.6)',
+                  border: topPlayerChosenSide === 'back' 
+                    ? '3px solid rgba(59, 130, 246, 0.9)' 
+                    : '2px solid rgba(255, 215, 0, 0.6)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3)',
+                  boxShadow: topPlayerChosenSide === 'back'
+                    ? '0 0 20px rgba(59, 130, 246, 0.6), 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3)'
+                    : '0 4px 20px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3)',
+                  position: 'relative',
                 }}
               >
-                <span
-                  style={{
-                    color: 'rgba(255, 215, 0, 0.9)',
-                    fontSize: '24px',
-                    fontWeight: 'bold',
-                    textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
-                    transform: 'scaleY(-1) scaleX(-1)',
-                  }}
-                >
-                  BACK
-                </span>
+                {topPlayerCard && topPlayerChosenSide === 'back' ? (
+                  <>
+                    {/* 앞면 숫자만 표시 (뒷면 숫자는 숨김) */}
+                    <div
+                      style={{
+                        color: '#ffffff',
+                        fontSize: '120px',
+                        fontWeight: 'bold',
+                        textShadow: '0 4px 8px rgba(0, 0, 0, 0.8)',
+                        transform: 'scaleY(-1) scaleX(-1)',
+                      }}
+                    >
+                      {topPlayerCard.frontValue}
+                    </div>
+                  </>
+                ) : (
+                  <span
+                    style={{
+                      color: 'rgba(255, 215, 0, 0.9)',
+                      fontSize: '24px',
+                      fontWeight: 'bold',
+                      textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
+                      transform: 'scaleY(-1) scaleX(-1)',
+                    }}
+                  >
+                    BACK
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -674,7 +776,7 @@ export default function PokerBoard({
           style={{
             background: 'rgba(0, 0, 0, 0.7)',
             borderRadius: '16px',
-            padding: '4px 20px',
+            padding: '1vh 2vh',
             border: '2px solid rgba(255, 215, 0, 0.8)',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.8)',
           }}
@@ -682,7 +784,7 @@ export default function PokerBoard({
           <div
             style={{
               color: 'rgba(255, 215, 0, 0.9)',
-              fontSize: '8px',
+              fontSize: '1.5vw',
               fontWeight: 'bold',
               marginBottom: '4px',
               textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
@@ -693,7 +795,7 @@ export default function PokerBoard({
           <div
             style={{
               color: '#ffffff',
-              fontSize: '28px',
+              fontSize: '1.7vw',
               fontWeight: 'bold',
               textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
             }}
@@ -717,9 +819,10 @@ export default function PokerBoard({
 
       {/* 하단 플레이어 칩 개수 표시 */}
       <div
-        className="absolute bottom-12"
+        className="absolute"
         style={{
-          left: 'calc(50% - 220px)',
+          bottom: '10vh',
+          left: 'calc(50% - 11vw)',
           zIndex: 20,
         }}
       >
@@ -735,7 +838,7 @@ export default function PokerBoard({
           <div
             style={{
               color: 'rgba(255, 215, 0, 0.9)',
-              fontSize: '12px',
+              fontSize: '1.5vw',
               fontWeight: 'bold',
               marginBottom: '4px',
               textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)',
@@ -746,7 +849,7 @@ export default function PokerBoard({
           <div
             style={{
               color: '#ffffff',
-              fontSize: '24px',
+              fontSize: '1.7vw',
               fontWeight: 'bold',
               textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
             }}
@@ -771,9 +874,10 @@ export default function PokerBoard({
 
       {/* 상단 플레이어 칩 개수 표시 */}
       <div
-        className="absolute top-24"
+        className="absolute"
         style={{
-          left: 'calc(50% - 200px)',
+          top: '14vh',
+          left: 'calc(50% - 11vw)',
           zIndex: 20,
         }}
       >
@@ -781,7 +885,7 @@ export default function PokerBoard({
           style={{
             background: 'rgba(0, 0, 0, 0.7)',
             borderRadius: '12px',
-            padding: '8px 19px',
+            padding: '1vh 1.8vh',
             border: !isMyTurn && currentTurnUserId ? '2px solid rgba(59, 130, 246, 0.9)' : '2px solid rgba(255, 215, 0, 0.6)',
             boxShadow: !isMyTurn && currentTurnUserId ? '0 0 20px rgba(59, 130, 246, 0.5)' : '0 4px 20px rgba(0, 0, 0, 0.5)',
           }}
@@ -789,7 +893,7 @@ export default function PokerBoard({
           <div
             style={{
               color: 'rgba(255, 215, 0, 0.9)',
-              fontSize: '12px',
+              fontSize: '1.5vw',
               fontWeight: 'bold',
               marginBottom: '4px',
               textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)',
@@ -800,7 +904,7 @@ export default function PokerBoard({
           <div
             style={{
               color: '#ffffff',
-              fontSize: '24px',
+              fontSize: '1.6vw',
               fontWeight: 'bold',
               textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
             }}
@@ -808,7 +912,7 @@ export default function PokerBoard({
             {topPlayerChips}
           </div>
           {!isMyTurn && currentTurnUserId && (
-            <div
+            <div  
               style={{
                 color: 'rgba(59, 130, 246, 0.9)',
                 fontSize: '12px',

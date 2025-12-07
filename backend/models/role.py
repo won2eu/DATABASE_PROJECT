@@ -6,7 +6,7 @@ class Role(Base):
     __tablename__ = "roles"
     
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    name = Column(String(50), nullable=False, unique=True)  # guest, member, table_manager, ai_manager, system_admin
+    name = Column(String(50), nullable=False, unique=True)  # guest, member, ai_manager, system_admin
     description = Column(String(255))
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     

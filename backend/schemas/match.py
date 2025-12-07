@@ -7,6 +7,7 @@ class MatchStart(BaseModel):
 
 class MatchPlayerInfo(BaseModel):
     user_id: int
+    username: str
     seat: int
     chips: int
     is_bot: bool

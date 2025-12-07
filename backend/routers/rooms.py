@@ -6,6 +6,7 @@ from models.user import User
 from models.enums import RoomStatus
 from schemas.room import RoomCreate, RoomJoin, RoomResponse
 from services.game_service import GameService
+from utils.auth import check_permission
 import secrets
 
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
@@ -17,6 +18,9 @@ def create_room(room_data: RoomCreate, db: Session = Depends(get_db)):
     player = db.query(User).filter(User.id == room_data.player1_id).first()
     if not player:
         raise HTTPException(status_code=404, detail="플레이어를 찾을 수 없습니다")
+    
+    # 권한 체크: create_room 권한 필요
+    check_permission(db, room_data.player1_id, "create_room")
     
     # 초대 코드 생성
     invite_code = secrets.token_urlsafe(8)[:16]

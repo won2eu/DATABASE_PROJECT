@@ -8,37 +8,28 @@ class DeckService:
     
     @staticmethod
     def create_card_templates(db: Session):
-        """90장의 카드 템플릿 생성 (한 면이 짝수면 다른 면은 홀수)"""
+        """카드 템플릿 생성 (1-9 범위, 한 면이 짝수면 다른 면은 홀수)"""
         # 이미 생성되어 있는지 확인
         existing = db.query(CardTemplate).first()
         if existing:
             return
         
-        # 90장의 카드 생성 (예: 1-45 범위의 숫자 조합)
+        # 1-9 범위의 카드 생성
         # 한 면이 짝수면 다른 면은 홀수로 구성
         cards = []
-        card_id = 1
         
         # 앞면 짝수, 뒷면 홀수 조합
-        for front in range(2, 46, 2):  # 2, 4, 6, ..., 44 (22개)
-            for back in range(1, 46, 2):  # 1, 3, 5, ..., 45 (23개)
-                if len(cards) >= 45:
-                    break
+        for front in range(2, 10, 2):  # 2, 4, 6, 8
+            for back in range(1, 10, 2):  # 1, 3, 5, 7, 9
                 cards.append((front, back))
-            if len(cards) >= 45:
-                break
         
-        # 앞면 홀수, 뒷면 짝수 조합 (나머지 45장)
-        for front in range(1, 46, 2):  # 1, 3, 5, ..., 45 (23개)
-            for back in range(2, 46, 2):  # 2, 4, 6, ..., 44 (22개)
-                if len(cards) >= 90:
-                    break
+        # 앞면 홀수, 뒷면 짝수 조합
+        for front in range(1, 10, 2):  # 1, 3, 5, 7, 9
+            for back in range(2, 10, 2):  # 2, 4, 6, 8
                 cards.append((front, back))
-            if len(cards) >= 90:
-                break
         
         # 카드 템플릿 생성
-        for front, back in cards[:90]:
+        for front, back in cards:
             template = CardTemplate(
                 front_value=front,
                 back_value=back,

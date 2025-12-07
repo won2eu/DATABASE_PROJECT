@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface LobbyProps {
   onStartGame: (userId: number, roomId: number) => void;
@@ -16,6 +16,26 @@ export default function Lobby({ onStartGame }: LobbyProps) {
   const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 방 생성 후 매치 시작 대기 (player1용)
+  useEffect(() => {
+    if (step === 'roomCreated' && roomId && userId) {
+      const checkMatchInterval = setInterval(async () => {
+        try {
+          const matchResponse = await fetch(`${API_URL}/api/matches/room/${roomId}`);
+          if (matchResponse.ok) {
+            // 매치가 시작되었으면 게임 시작
+            clearInterval(checkMatchInterval);
+            onStartGame(userId, roomId);
+          }
+        } catch (error) {
+          console.error('매치 확인 실패:', error);
+        }
+      }, 1000); // 1초마다 확인
+
+      return () => clearInterval(checkMatchInterval);
+    }
+  }, [step, roomId, userId, onStartGame]);
 
   // 사용자 생성
   const handleCreateUser = async () => {
@@ -46,6 +66,74 @@ export default function Lobby({ onStartGame }: LobbyProps) {
       setStep('createOrJoin');
     } catch (err: any) {
       setError(err.message || '사용자 생성 중 오류가 발생했습니다');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 게스트로 시작
+  const handleGuestLogin = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      // 게스트 이름 자동 생성 (Guest_랜덤숫자)
+      const guestUsername = `Guest_${Math.floor(Math.random() * 10000)}`;
+      
+      const response = await fetch(`${API_URL}/api/users/guest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username: guestUsername }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || '게스트 로그인 실패');
+      }
+
+      const user = await response.json();
+      setUserId(user.id);
+      setUsername(user.username);
+      // 게스트는 방 생성 불가능하므로 바로 참가 화면으로
+      setStep('joinRoom');
+    } catch (err: any) {
+      setError(err.message || '게스트 로그인 중 오류가 발생했습니다');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 로그인
+  const handleLogin = async () => {
+    if (!username.trim()) {
+      setError('사용자 이름을 입력해주세요');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_URL}/api/users/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || '로그인 실패');
+      }
+
+      const user = await response.json();
+      setUserId(user.id);
+      setStep('createOrJoin');
+    } catch (err: any) {
+      setError(err.message || '로그인 중 오류가 발생했습니다');
     } finally {
       setLoading(false);
     }
@@ -182,7 +270,11 @@ export default function Lobby({ onStartGame }: LobbyProps) {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleCreateUser()}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && !loading && username.trim()) {
+                    handleLogin();
+                  }
+                }}
                 placeholder="이름을 입력하세요"
                 style={{
                   width: '100%',
@@ -197,27 +289,73 @@ export default function Lobby({ onStartGame }: LobbyProps) {
                 disabled={loading}
               />
             </div>
-            <button
-              onClick={handleCreateUser}
-              disabled={loading || !username.trim()}
-              style={{
-                width: '100%',
-                padding: '16px',
-                fontSize: '20px',
-                fontWeight: 'bold',
-                background: loading || !username.trim()
-                  ? 'rgba(60, 60, 60, 0.7)'
-                  : 'linear-gradient(135deg, rgba(13, 93, 31, 0.95) 0%, rgba(26, 122, 46, 0.95) 100%)',
-                color: 'rgba(255, 215, 0, 1)',
-                border: '2px solid rgba(255, 215, 0, 0.8)',
-                borderRadius: '12px',
-                cursor: loading || !username.trim() ? 'not-allowed' : 'pointer',
-                opacity: loading || !username.trim() ? 0.5 : 1,
-                transition: 'all 0.3s',
-              }}
-            >
-              {loading ? '처리 중...' : '시작하기'}
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={handleLogin}
+                  disabled={loading || !username.trim()}
+                  style={{
+                    flex: 1,
+                    padding: '16px',
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    background: loading || !username.trim()
+                      ? 'rgba(60, 60, 60, 0.7)'
+                      : 'linear-gradient(135deg, rgba(59, 130, 246, 0.95) 0%, rgba(37, 99, 235, 0.95) 100%)',
+                    color: '#ffffff',
+                    border: '2px solid rgba(59, 130, 246, 0.8)',
+                    borderRadius: '12px',
+                    cursor: loading || !username.trim() ? 'not-allowed' : 'pointer',
+                    opacity: loading || !username.trim() ? 0.5 : 1,
+                    transition: 'all 0.3s',
+                  }}
+                >
+                  {loading ? '처리 중...' : '로그인'}
+                </button>
+                <button
+                  onClick={handleCreateUser}
+                  disabled={loading || !username.trim()}
+                  style={{
+                    flex: 1,
+                    padding: '16px',
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    background: loading || !username.trim()
+                      ? 'rgba(60, 60, 60, 0.7)'
+                      : 'linear-gradient(135deg, rgba(13, 93, 31, 0.95) 0%, rgba(26, 122, 46, 0.95) 100%)',
+                    color: 'rgba(255, 215, 0, 1)',
+                    border: '2px solid rgba(255, 215, 0, 0.8)',
+                    borderRadius: '12px',
+                    cursor: loading || !username.trim() ? 'not-allowed' : 'pointer',
+                    opacity: loading || !username.trim() ? 0.5 : 1,
+                    transition: 'all 0.3s',
+                  }}
+                >
+                  {loading ? '처리 중...' : '회원가입'}
+                </button>
+              </div>
+              <button
+                onClick={handleGuestLogin}
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  background: loading
+                    ? 'rgba(60, 60, 60, 0.7)'
+                    : 'linear-gradient(135deg, rgba(168, 85, 247, 0.95) 0%, rgba(147, 51, 234, 0.95) 100%)',
+                  color: '#ffffff',
+                  border: '2px solid rgba(168, 85, 247, 0.8)',
+                  borderRadius: '12px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.5 : 1,
+                  transition: 'all 0.3s',
+                }}
+              >
+                {loading ? '처리 중...' : '👤 게스트로 시작하기 (방 참가만 가능)'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -425,23 +563,9 @@ export default function Lobby({ onStartGame }: LobbyProps) {
                 상대방에게 이 ID를 공유하세요
               </p>
             </div>
-            <button
-              onClick={() => onStartGame(userId!, roomId)}
-              style={{
-                width: '100%',
-                padding: '20px',
-                fontSize: '20px',
-                fontWeight: 'bold',
-                background: 'linear-gradient(135deg, rgba(13, 93, 31, 0.95) 0%, rgba(26, 122, 46, 0.95) 100%)',
-                color: 'rgba(255, 215, 0, 1)',
-                border: '2px solid rgba(255, 215, 0, 0.8)',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                transition: 'all 0.3s',
-              }}
-            >
-              🎯 게임 시작하기
-            </button>
+            <p style={{ fontSize: '14px', color: '#93c5fd', textAlign: 'center', marginTop: '16px' }}>
+              상대방이 룸에 참가하면 게임이 자동으로 시작됩니다
+            </p>
           </div>
         )}
       </div>
